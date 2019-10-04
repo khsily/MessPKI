@@ -1,6 +1,6 @@
 import React, { Component } from "react";
 import loadWeb3 from "ethpki-utils/loadWeb3";
-import Certificate from 'ethpki-utils';
+import PKIContract from 'ethpki-utils/PKIContract';
 
 import Client from './pages/Client';
 
@@ -9,7 +9,7 @@ class App extends Component {
     super(props);
 
     this.state = {
-      cert: undefined,
+      pkiContract: undefined,
     }
   }
 
@@ -18,21 +18,21 @@ class App extends Component {
   };
 
   render() {
-    if (!this.state.cert) {
+    if (!this.state.pkiContract) {
       return <div>Loading Web3, accounts, and contract...</div>;
     }
 
     return (
       <div id='app'>
-        <Client cert={this.state.cert} />
+        <Client pkiContract={this.state.pkiContract} />
       </div>
     );
   }
 
   async loadWeb3() {
     const web3 = await loadWeb3();
-    const cert = new Certificate(web3);
-    this.setState({ cert });
+    const pkiContract = new PKIContract(web3);
+    this.setState({ pkiContract });
   }
 }
 

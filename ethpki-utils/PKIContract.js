@@ -1,4 +1,4 @@
-class Certificate {
+class PKIContract {
   constructor(web3Data) {
     this.web3 = web3Data.web3;
     this.account = web3Data.accounts[0] || [];
@@ -20,19 +20,6 @@ class Certificate {
   async isAdmin() {
     const owner = await this.contract.methods.owner().call();
     return owner === this.currentAcc;
-  }
-
-  async getUser(address) {
-    const user = await this.contract.methods.getUser(address).call();
-    return user;
-  }
-
-  async setUser(address, name) {
-    await this.contract.methods.setUser(address, name).send({ from: address });
-  }
-
-  async register() {
-    await this.contract.methods.register(this.currentAcc).send({ from: this.currentAcc });
   }
 
   /**
@@ -72,10 +59,10 @@ class Certificate {
     return res;
   }
 
-  async isCertificateValid(certId) {
-    const res = await this.contract.methods.isCertificateValid(certId).call();
+  async isSignatureValid(signId) {
+    const res = await this.contract.methods.isSignatureValid(signId).call();
     return res;
   }
 }
 
-export default Certificate;
+export default PKIContract;

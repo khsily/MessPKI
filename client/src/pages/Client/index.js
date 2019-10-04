@@ -2,6 +2,7 @@ import React, { Component } from 'react';
 import NodeRSA from 'node-rsa';
 
 import UserForm from '../../components/UserForm';
+import MailBox from '../../components/MailBox';
 
 import "./Client.scss";
 import { User, Msg, Cert } from 'ethpki-utils/api/models';
@@ -21,15 +22,16 @@ class Client extends Component {
     }
 
     this.handleSubmitUserForm = this.handleSubmitUserForm.bind(this);
+    this.showCertificateInfo = this.showCertificateInfo.bind(this);
   }
 
   async componentDidMount() {
-    const { cert } = this.props;
+    const { pkiContract } = this.props;
     this.setState({ isLaoding: true });
 
-    cert.onAccChange(() => window.location.reload());
+    pkiContract.onAccChange(() => window.location.reload());
 
-    const { data: userInfo } = await User.get(cert.currentAcc);
+    const { data: userInfo } = await User.get(pkiContract.currentAcc);
     const { data: users } = await User.getAll();
     const { data: certs } = await Cert.getAll();
 
@@ -93,25 +95,53 @@ class Client extends Component {
           <button className='btn' onClick={() => this.send()}>SEND</button>
         </div>
         <div className='receiver-container main-container'>
-          <div className='mail-box'>
-            <h3 className='mail-title'>Signed Messages</h3>
-            <ul className='mail-list'>
-              {this.state.signedMsgs.map((v, i) =>
-                <li key={`signed_${i}`}><b>{v.sender_name}</b> : {v.content}</li>
-              )}
-            </ul>
-          </div>
-          <div className='mail-box'>
-            <h3 className='mail-title'>Unsigned Messages</h3>
-            <ul className='mail-list'>
-              {this.state.unsignedMsgs.map((v, i) =>
-                <li key={`unsigned_${i}`}><b>{v.sender_name}</b> : {v.content}</li>
-              )}
-            </ul>
-          </div>
+          <MailBox
+            title='Signed Messages'
+            msgs={this.state.signedMsgs}
+            onClickName={this.showCertificateInfo} />
+          <MailBox
+            title='Unsigned Messages'
+            msgs={this.state.unsignedMsgs}
+            onClickName={this.showCertificateInfo} />
         </div>
       </div>
     );
+  }
+
+  async showCertificateInfo(msg) {
+    const { pkiContract } = this.props;
+    const { cert } = msg;
+
+    if (!cert[0]) {
+      alert(`Certificate not found`);
+      return;
+    }
+
+    const { cert_id, sign_id } = cert[0];
+
+    const certInfo = await pkiContract.getCertInfo(cert_id);
+    const isSignValid = await pkiContract.isSignatureValid(sign_id);
+    const { data, hash } = certInfo;
+
+    if ((sign_id !== 0 && !sign_id) || !isSignValid) {
+      alert(`
+[data]: ${data},
+[hash]: ${hash},
+[sign]: <Unsigned Certificate>
+      `);
+      return;
+    }
+
+    const signInfo = await pkiContract.getSignInfo(sign_id);
+    const { expiry, owner, sign } = signInfo;
+
+    alert(`
+[data]: ${data},
+[hash]: ${hash},
+[expiry]: ${expiry},
+[owner]: ${owner},
+[sign]: ${sign}
+    `);
   }
 
   async loadMessageData(userHash, crl) {
@@ -133,20 +163,20 @@ class Client extends Component {
   }
 
   async validateSignatures(certs, users) {
-    const { cert } = this.props;
+    const { pkiContract } = this.props;
     const crl = {};
 
     for (const v of certs) {
-      const { hash } = await cert.getCertInfo(v.cert_id);
-      const { sign } = await cert.getSignInfo(v.sign_id);
-      const isCertNotExpired = await cert.isCertificateValid(v.cert_id);
+      const { hash } = await pkiContract.getCertInfo(v.cert_id);
+      const { sign } = await pkiContract.getSignInfo(v.sign_id);
+      const isCertValid = await pkiContract.isSignatureValid(v.sign_id);
 
       const userInfo = users.find(user => user.hash === v.user_hash);
       const { publickey } = userInfo;
       const key = new NodeRSA(publickey);
 
       const isValid = key.verify(hash, sign, 'utf8', 'base64');
-      crl[v.cert_id] = !(isValid && v.is_signed && isCertNotExpired);
+      crl[v.cert_id] = !(isValid && v.is_signed && isCertValid);
     }
 
     return crl;
@@ -169,15 +199,14 @@ class Client extends Component {
   async handleSubmitUserForm(e) {
     e.preventDefault();
 
-    const { cert } = this.props;
+    const { pkiContract } = this.props;
 
     const formData = new FormData(e.target);
     const name = formData.get('name');
     const email = formData.get('email');
-    const hash = cert.currentAcc;
+    const hash = pkiContract.currentAcc;
 
     try {
-      await cert.setUser(cert.currentAcc, name);
       await User.register({ name, email, hash });
       this.setState({ userInfo: { name, email } });
     } catch (e) {

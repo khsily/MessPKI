@@ -2,29 +2,22 @@ pragma solidity >=0.4.0;
 
 // TODO: 암호화/복호화
 
-contract PKI {
-    
+contract PKI {    
     address public owner;
     
-    mapping (uint => Entity) public entities;
-    mapping (address => User) public users;
+    // mapping (uint => Entity) public entities;
     mapping (uint => Certificate) public registry;
     mapping (uint => Signature) public signings;
     mapping (uint => bool) public crl; // 인증서 폐기 목록 (Certificate Revocation Lists)
-    uint nEntities = 0;
+    // uint nEntities = 0;
     uint nCertificates = 0;
     uint nSignatures = 0;
     
     // 엔티티(개체)
-    struct Entity {
-        address identity;
-        uint level;
-    }
-
-    // 유저정보
-    struct User {
-        string name;
-    }
+    // struct Entity {
+    //     address identity;
+    //     uint level;
+    // }
 
     // 인증서
     struct Certificate {
@@ -40,32 +33,35 @@ contract PKI {
         string sign;
     }
 
+    // Modifiers
+    modifier onlyOwner { require(msg.sender == owner); _; }
+
     constructor() public {
         owner = msg.sender;
     }
     
     // Add a trusted entity. Owner of the PKI only
     // 신뢰가능한 엔티티 추가. PKI 소유자 전용
-    function register(address trustedEntity) public returns (uint entityId) {
-        if (msg.sender == owner) { // PKI 소유자 전용
-            // 신뢰가능한 언티티 추가.
-            entityId = nEntities++;
-            entities[entityId] = Entity(trustedEntity, 1);
-        } else {
-            // 새로 추가하려는 엔티티가 entities 맵핑에 존재하는 경우에만 등록
-            bool found = false;
-            for (uint i=0; i < nEntities; i++) {
-                if (msg.sender == entities[i].identity) {
-                    entityId = nEntities++;
-                    found = true;
-                    entities[entityId] = Entity(trustedEntity, entities[i].level + 1);
-                }
-            }
+    // function setCA(address trustedEntity) public returns (uint entityId) {
+    //     if (msg.sender == owner) { // PKI 소유자 전용
+    //         // 신뢰가능한 언티티 추가.
+    //         entityId = nEntities++;
+    //         entities[entityId] = Entity(trustedEntity, 1);
+    //     } else {
+    //         // 새로 추가하려는 엔티티가 entities 맵핑에 존재하는 경우에만 등록
+    //         bool found = false;
+    //         for (uint i=0; i < nEntities; i++) {
+    //             if (msg.sender == entities[i].identity) {
+    //                 entityId = nEntities++;
+    //                 found = true;
+    //                 entities[entityId] = Entity(trustedEntity, entities[i].level + 1);
+    //             }
+    //         }
 
-            // 만약 found가 false 면 즉시 함수 종료후 모든 상태변환을 되돌림.
-            require(found);
-        }
-    }
+    //         // 만약 found가 false 면 즉시 함수 종료후 모든 상태변환을 되돌림.
+    //         require(found);
+    //     }
+    // }
 
     // A non trusted entity publishes its certificate
     // 신뢰 할 수 없는 엔티티가 자신의 인증서를 발행
@@ -76,54 +72,23 @@ contract PKI {
 
     // A trusted entity signs a certificate (expiry is time in seconds)
     // 신뢰가능한 엔티티가 인증서에 서명 (expiry = 초 단위)
-    function sign(uint certId, string memory _sign, uint expiry) public returns (uint signId) {
-        for (uint i=0; i < nEntities; i++) {
-            if (entities[i].identity == msg.sender) { // msg.sender 가 신뢰가능한 경우
-                // 서명을 signings 리스트에 추가
-                signId = nSignatures++;
-                signings[signId] = Signature(msg.sender, certId, now + expiry, _sign);
-                // 인증서 폐기 여부를 false 로 설정 (사용가능한 인증서)
-                crl[signId] = false;
-                break;
-            }
-        }
+    function sign(uint certId, string memory _sign, uint expiry) public onlyOwner returns (uint signId) {
+        // 서명을 signings 리스트에 추가
+        signId = nSignatures++;
+        signings[signId] = Signature(msg.sender, certId, now + expiry, _sign);
+        // 인증서 폐기 여부를 false 로 설정 (사용가능한 인증서)
+        crl[signId] = false;
     }
 
     // A trusted entity revokes a certificate
     // 신뢰가능한 엔티티가 인증서 취소 (인증서 폐기)
-    function revoke(uint signId) public {
-        for (uint i=0; i < nEntities; i++) {
-            if (entities[i].identity == msg.sender) {
-                crl[signId] = true;
-                break;
-            }
-        }
+    function revoke(uint signId) public onlyOwner {
+        crl[signId] = true;
     }
 
     // 서명 유효성 체크
     function isSignatureValid(uint signId) public view returns (bool state) {
         return !crl[signId] && now <= signings[signId].expiry;
-    }
-
-    // 인증서 유효성 체크
-    function isCertificateValid(uint certId) public view returns (bool state) {
-        for (uint i=0; i < nSignatures; i++) {
-            if (signings[i].certId == certId) {
-                if (isSignatureValid(i)) {
-                    return true; // Else try for another signature
-                }
-            }
-        }
-        return false;
-    }
-
-    function setUser(address _id, string memory name) public {
-        users[_id] = User(name);
-    }
-
-    function getUser(address _id) public view returns(string memory name) {
-        User memory user = users[_id];
-        return (user.name);
     }
 
 }

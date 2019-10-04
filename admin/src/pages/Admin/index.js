@@ -12,18 +12,29 @@ class Admin extends Component {
     this.state = {
       users: [],
       certs: [],
+      loading: false,
+      isAdmin: false,
     }
 
     this.handleCreateCert = this.handleCreateCert.bind(this);
   }
 
   async componentDidMount() {
-    const { cert } = this.props;
-    await cert.register();
+    const { pkiContract } = this.props;
+
+    pkiContract.onAccChange(() => window.location.reload());
+
+    this.setState({ loading: true });
+    const isAdmin = await pkiContract.isAdmin();
+    this.setState({ isAdmin, loading: false });
     await this.loadData();
   }
 
   render() {
+    if (this.state.loading) return <div>Loading...</div>
+
+    if (!this.state.isAdmin) return <div>Only owner allowed</div>
+
     return (
       <section id='admin'>
         <ul className='user-list'>
@@ -65,7 +76,7 @@ class Admin extends Component {
   }
 
   async appendCert(userInfo) {
-    const { cert } = this.props;
+    const { pkiContract } = this.props;
 
     try {
       const certInfo = this.getCertInfo(userInfo.hash);
@@ -77,8 +88,7 @@ class Admin extends Component {
 
       data = JSON.stringify(data);
       const hash = sha512(data);
-
-      const certId = await cert.append(data, hash);
+      const certId = await pkiContract.append(data, hash);
       await Cert.append({
         cert_id: certId,
         user_hash: userInfo.hash,
@@ -91,10 +101,10 @@ class Admin extends Component {
   }
 
   async signCert(certId, userInfo) {
-    const { cert } = this.props;
+    const { pkiContract } = this.props;
 
     try {
-      const { hash: certHash } = await cert.getCertInfo(certId);
+      const { hash: certHash } = await pkiContract.getCertInfo(certId);
       const { hash: userHash } = userInfo;
 
       const { data: sign } = await Cert.sign({
@@ -102,7 +112,7 @@ class Admin extends Component {
         cert_hash: certHash,
       });
 
-      const signId = await cert.sign(certId, sign);
+      const signId = await pkiContract.sign(certId, sign);
       await Cert.update({ cert_id: certId, sign_id: signId });
 
       await this.loadData();
@@ -114,12 +124,12 @@ class Admin extends Component {
   }
 
   async revokeCert(userHash) {
-    const { cert } = this.props;
+    const { pkiContract } = this.props;
 
     try {
       const certInfo = this.getCertInfo(userHash);
-      const { cert_id } = certInfo;
-      await cert.revoke(cert_id);
+      const { cert_id, sign_id } = certInfo;
+      await pkiContract.revoke(sign_id);
       await Cert.revoke({ cert_id });
       await this.loadData();
     } catch (e) {
