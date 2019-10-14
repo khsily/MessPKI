@@ -1,5 +1,5 @@
 import getWeb3 from './getWeb3';
-import PKIContract from './contracts/PKI.json';
+import PKIContract from '../contracts/PKI.json';
 
 const loadWeb3 = async () => {
   try {
